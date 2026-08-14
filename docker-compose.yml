@@ -1,0 +1,11 @@
+services:
+  api:
+    build: .
+    image: chassiscan:latest
+    container_name: chassiscan-api
+    ports:
+      - "8000:8000"
+    environment:
+      CHASSISCAN_MIN_CONF: "0.45"
+      CHASSISCAN_MAX_VARIANTS: "6"
+    restart: unless-stopped
