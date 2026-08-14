@@ -77,7 +77,7 @@ resource "aws_s3_bucket_lifecycle_configuration" "images" {
 resource "aws_ecr_repository" "api" {
   name                 = var.project
   image_tag_mutability = "MUTABLE"
-  force_delete          = var.env != "prod"
+  force_delete         = var.env != "prod"
 
   image_scanning_configuration {
     scan_on_push = true
