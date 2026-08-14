@@ -1,6 +1,6 @@
 import pytest
 
-from app import vin_utils as vu
+from chassiscan import vin_utils as vu
 
 VALID = "1HGCM82633A004352"
 
