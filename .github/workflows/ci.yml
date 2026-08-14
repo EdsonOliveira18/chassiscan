@@ -34,10 +34,10 @@ jobs:
           pip install -r requirements.txt
 
       - name: Formatação (black)
-        run: black --check chassiscan tests
+        run: black --check app tests
 
       - name: Análise estática (ruff)
-        run: ruff check chassiscan tests
+        run: ruff check app tests
 
       - name: Testes unitários
         run: pytest tests/test_unit_vin.py --no-cov -v
@@ -49,7 +49,7 @@ jobs:
         run: pytest tests/test_accuracy.py --no-cov -v
 
       - name: Cobertura mínima (80%)
-        run: pytest --cov=chassiscan --cov-report=xml --cov-report=term-missing
+        run: pytest --cov=app --cov-report=xml --cov-report=term-missing
 
       - name: Publicar relatório
         if: always()
@@ -66,11 +66,11 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Build da imagem
-        run: docker build -t chassiscan:${{ github.sha }} .
+        run: docker build -t app:${{ github.sha }} .
 
       - name: Smoke test do /health
         run: |
-          docker run -d -p 8000:8000 --name chassiscan-api chassiscan:${{ github.sha }}
+          docker run -d -p 8000:8000 --name app-api app:${{ github.sha }}
           for i in $(seq 1 30); do
             if curl -fs http://localhost:8000/health; then
               echo "API respondendo"
@@ -79,7 +79,7 @@ jobs:
             sleep 3
           done
           echo "API nao respondeu"
-          docker logs chassiscan-api
+          docker logs app-api
           exit 1
 
   terraform:
