@@ -8,8 +8,7 @@ from .ocr_engine import read_vin
 
 
 def main(argv=None) -> int:
-    parser = argparse.ArgumentParser(prog="chassiscan",
-                                     description="Lê o VIN de uma foto.")
+    parser = argparse.ArgumentParser(prog="chassiscan", description="Lê o VIN de uma foto.")
     parser.add_argument("imagem", help="caminho da foto do chassi")
     parser.add_argument("--json", action="store_true", help="saída em JSON")
     args = parser.parse_args(argv)
@@ -25,8 +24,10 @@ def main(argv=None) -> int:
     else:
         status = "VÁLIDO" if result.valid else "NÃO VALIDADO"
         print(f"VIN: {result.vin or '-'}  [{status}]")
-        print(f"Confiança: {result.confidence:.2f} | "
-              f"variante={result.variant} rotação={result.rotation}")
+        print(
+            f"Confiança: {result.confidence:.2f} | "
+            f"variante={result.variant} rotação={result.rotation}"
+        )
         if not result.valid and result.candidates:
             print("Candidatos:", ", ".join(result.candidates))
     return 0 if result.valid else 2

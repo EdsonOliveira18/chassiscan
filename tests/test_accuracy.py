@@ -1,5 +1,6 @@
 """Acurácia sobre lote rotulado. Coloque as fotos em tests/fixtures/
 com o VIN no nome do arquivo: 1HGCM82633A004352_reflexo.jpg"""
+
 from pathlib import Path
 
 import cv2

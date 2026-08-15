@@ -5,11 +5,14 @@ from app import vin_utils as vu
 VALID = "1HGCM82633A004352"
 
 
-@pytest.mark.parametrize("raw,expected", [
-    ("1hg-cm 826", "1HGCM826"),
-    ("IOQ123", "100123"),
-    ("", ""),
-])
+@pytest.mark.parametrize(
+    "raw,expected",
+    [
+        ("1hg-cm 826", "1HGCM826"),
+        ("IOQ123", "100123"),
+        ("", ""),
+    ],
+)
 def test_normalize(raw, expected):
     assert vu.normalize(raw) == expected
 
