@@ -1,5 +1,6 @@
 """Motor de OCR com variantes, rotações, ordenação espacial e early stop."""
-from dataclasses import dataclass, asdict
+
+from dataclasses import asdict, dataclass
 
 import numpy as np
 
@@ -15,6 +16,7 @@ def get_reader():
     global _reader
     if _reader is None:
         import easyocr
+
         _reader = easyocr.Reader(["en"], gpu=False, verbose=False)
     return _reader
 
@@ -62,12 +64,11 @@ def read_vin(img: np.ndarray, reader=None) -> OCRResult:
                     seen.append(cand)
                 if vu.is_valid(cand):
                     # early stop: checksum bateu
-                    return OCRResult(cand, True, conf, name, rot,
-                                     seen[:settings.max_candidates])
+                    return OCRResult(cand, True, conf, name, rot, seen[: settings.max_candidates])
             if conf > best.confidence and seen:
                 best = OCRResult(seen[0], False, conf, name, rot, list(seen))
 
-    best.candidates = seen[:settings.max_candidates]
+    best.candidates = seen[: settings.max_candidates]
     return best
 
 

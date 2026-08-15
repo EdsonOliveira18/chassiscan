@@ -1,7 +1,6 @@
 import io
 
 import cv2
-import pytest
 
 from app.api import ocr_engine
 
@@ -18,8 +17,7 @@ def test_ocr_arquivo_vazio(client):
 
 
 def test_ocr_arquivo_nao_imagem(client):
-    r = client.post("/ocr/chassi",
-                    files={"file": ("x.txt", b"nao sou imagem", "text/plain")})
+    r = client.post("/ocr/chassi", files={"file": ("x.txt", b"nao sou imagem", "text/plain")})
     assert r.status_code == 415
 
 

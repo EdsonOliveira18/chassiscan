@@ -1,4 +1,5 @@
 """Normalização e validação de VIN (ISO 3779 / 3780)."""
+
 import re
 
 VIN_LEN = 17
@@ -10,9 +11,29 @@ TRANSLITERATION = {
 }
 # tabela oficial
 TRANSLITERATION = {
-    "A": 1, "B": 2, "C": 3, "D": 4, "E": 5, "F": 6, "G": 7, "H": 8,
-    "J": 1, "K": 2, "L": 3, "M": 4, "N": 5, "P": 7, "R": 9,
-    "S": 2, "T": 3, "U": 4, "V": 5, "W": 6, "X": 7, "Y": 8, "Z": 9,
+    "A": 1,
+    "B": 2,
+    "C": 3,
+    "D": 4,
+    "E": 5,
+    "F": 6,
+    "G": 7,
+    "H": 8,
+    "J": 1,
+    "K": 2,
+    "L": 3,
+    "M": 4,
+    "N": 5,
+    "P": 7,
+    "R": 9,
+    "S": 2,
+    "T": 3,
+    "U": 4,
+    "V": 5,
+    "W": 6,
+    "X": 7,
+    "Y": 8,
+    "Z": 9,
     **{str(d): d for d in range(10)},
 }
 WEIGHTS = [8, 7, 6, 5, 4, 3, 2, 10, 0, 9, 8, 7, 6, 5, 4, 3, 2]
@@ -31,7 +52,7 @@ def checksum_digit(vin: str) -> str | None:
     if len(vin) != VIN_LEN:
         return None
     total = 0
-    for ch, weight in zip(vin, WEIGHTS):
+    for ch, weight in zip(vin, WEIGHTS, strict=True):
         if ch not in TRANSLITERATION:
             return None
         total += TRANSLITERATION[ch] * weight
@@ -52,9 +73,9 @@ def extract_candidates(text: str, limit: int = 5) -> list[str]:
     clean = normalize(text)
     found, seen = [], set()
     for i in range(len(clean) - VIN_LEN + 1):
-        window = clean[i:i + VIN_LEN]
+        window = clean[i : i + VIN_LEN]
         if VIN_REGEX.fullmatch(window) and window not in seen:
             seen.add(window)
             found.append(window)
-    found.sort(key=lambda v: not is_valid(v))   # válidos primeiro
+    found.sort(key=lambda v: not is_valid(v))  # válidos primeiro
     return found[:limit]
