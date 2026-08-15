@@ -15,12 +15,7 @@
 | **Scripts de IaC (Terraform)** | [`infra/`](infra/) |
 | **Testes automatizados** | [`tests/`](tests/) |
 
-> **Aluno:** Edson · **Curso:** Análise e Desenvolvimento de Sistemas · **Disciplina:** DevOps · **Fase:** 1 · **Semestre:** 2026/2
-
----
-
-# PARTE 1 — DOCUMENTAÇÃO DE PLANEJAMENTO
-*(Critério 1)*
+> **Aluno:** Edson Oliveira· **Curso:** Análise e Desenvolvimento de Sistemas · **Disciplina:** DevOps · **Fase:** 1 · **Semestre:** 2026/3
 
 ## 1.1 Descrição do projeto
 
@@ -198,14 +193,9 @@ EC2 t3.micro (Amazon Linux 2023)
 | `staging` | Validação automatizada | `staging` |
 | `prod` | Produção | `default` |
 
----
-
-# PARTE 2 — PIPELINE DE INTEGRAÇÃO CONTÍNUA
-*(Critério 2)*
-
 ## 2.1 Repositório configurado
 
-- **URL:** https://github.com/USUARIO/chassiscan
+- **URL:** https://github.com/EdsonOliveira18/chassiscan
 - Visibilidade pública, licença MIT, `.gitignore` para Python/Terraform.
 - Branch `main` protegida: PR obrigatório e *status check* do CI exigido.
 
@@ -455,9 +445,6 @@ pytest --cov=app --cov-report=term-missing
 O mesmo comando roda no CI (estágio 7), com `--cov-fail-under=80` — os testes são, portanto, **integrados ao pipeline**, não apenas locais.
 
 ---
-
-# PARTE 3 — SCRIPTS DE INFRAESTRUTURA COMO CÓDIGO
-*(Critério 3)*
 
 ## 3.1 Organização
 
@@ -895,43 +882,14 @@ Resposta de `POST /ocr/chassi`:
 | 415 | Formato de imagem inválido |
 | 500 | Erro interno no processamento |
 
----
-
-## 7. Evidências da entrega
-
-| Evidência | Onde verificar |
-|---|---|
-| Pipeline de CI executando | Aba **Actions** do repositório |
-| Testes aprovados e cobertura | Log do CI + artefato `cobertura-py3.11` |
-| Badge de status | Topo deste README |
-| IaC validado | Job `terraform` no pipeline |
-| Provisionamento realizado | `docs/evidencias/terraform-apply.png` |
-
----
-
-## 8. Resultados da Fase 1
-
-- Repositório versionado com branch `main` protegida.
-- Pipeline de CI funcional em Python 3.11 e 3.12, com duração média de ~3 min.
-- Cobertura de testes de 80%+ com *gate* automático.
-- Build Docker validado por *smoke test* no `/health`.
-- Infraestrutura completa descrita em Terraform e validada no pipeline.
-
-## 9. Dificuldades e aprendizados
-
-- **Dependência de sistema no CI:** o Tesseract não é pacote Python; foi preciso instalá-lo via `apt-get` no runner. Isolar o OCR com *mock* nos testes tornou o pipeline mais rápido e estável.
-- **Cache de dependências:** reduziu o tempo do pipeline em cerca de 40%.
-- **State do Terraform:** state local não serve para trabalho colaborativo — o backend S3 já está previsto e comentado no código.
-- **Menor privilégio no IAM:** políticas restritas ao bucket do projeto, em vez de acesso amplo ao S3.
-
-## 10. Próximas fases
+## 7. Próximas fases
 
 - [ ] Publicar imagem no GHCR e automatizar o *deploy* (CD).
 - [ ] Backend remoto do Terraform com *lock* no DynamoDB.
 - [ ] Monitoramento e alertas (CloudWatch / Prometheus).
 - [ ] Autenticação por API key.
 
-## 11. Referências
+## 8. Referências
 
 - ISO 3779:2009 — *Road vehicles: Vehicle Identification Number (VIN)*
 - GitHub Actions — https://docs.github.com/actions
@@ -940,11 +898,4 @@ Resposta de `POST /ocr/chassi`:
 - Tesseract OCR — https://github.com/tesseract-ocr/tesseract
 - Pytest — https://docs.pytest.org
 - Ruff — https://docs.astral.sh/ruff
-
-## 12. Licença
-
-MIT — veja o arquivo [`LICENSE`](LICENSE).
-
----
-
 *Desenvolvido por **Edson** — Análise e Desenvolvimento de Sistemas · Disciplina de DevOps · Fase 1*
