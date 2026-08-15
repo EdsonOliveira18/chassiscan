@@ -1,6 +1,6 @@
 # ChassiScan API — Fase 1: Configuração e Automação Inicial
 
-![CI](https://github.com/USUARIO/chassiscan/actions/workflows/ci.yml/badge.svg)
+![CI](https://github.com/EdsonOliveira18/chassiscan/actions/workflows/ci.yml/badge.svg)
 ![Python](https://img.shields.io/badge/python-3.11%2B-blue)
 ![Terraform](https://img.shields.io/badge/Terraform-1.9-844FBA)
 ![License](https://img.shields.io/badge/license-MIT-green)
@@ -9,8 +9,8 @@
 
 | Recurso | Link |
 |---|---|
-| **Repositório (código-fonte)** | https://github.com/USUARIO/chassiscan |
-| **Pipeline de CI (execuções)** | https://github.com/USUARIO/chassiscan/actions |
+| **Repositório (código-fonte)** | https://github.com/EdsonOliveira18/chassiscan|
+| **Pipeline de CI (execuções)** | https://github.com/EdsonOliveira18/chassiscan/actions |
 | **Workflow de CI** | [`.github/workflows/ci.yml`](.github/workflows/ci.yml) |
 | **Scripts de IaC (Terraform)** | [`infra/`](infra/) |
 | **Testes automatizados** | [`tests/`](tests/) |
