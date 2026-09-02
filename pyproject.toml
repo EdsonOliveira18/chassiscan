@@ -1,18 +1,56 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "chassiscan"
 version = "1.0.0"
 description = "API de validacao e consulta de chassi (VIN)"
+readme = "README.md"
 requires-python = ">=3.12"
 
+[tool.setuptools]
+packages = ["app"]
+
+# ---------- Formatação ----------
 [tool.black]
 line-length = 100
+target-version = ["py312"]
 
+# ---------- Lint ----------
 [tool.ruff]
 line-length = 100
+target-version = "py312"
+exclude = [".venv", "build", "dist", "infra"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "B", "UP"]
 
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B011"]
+
+# ---------- Testes ----------
 [tool.pytest.ini_options]
-addopts = "-q --cov=app --cov-report=term-missing"
+pythonpath = ["."]
 testpaths = ["tests"]
+addopts = "-q --cov=app --cov-report=term-missing --cov-report=xml"
+markers = [
+    "unit: testes unitarios rapidos",
+    "integration: testes de integracao da API",
+    "accuracy: gate de acuracia do OCR",
+]
+
+# ---------- Cobertura ----------
+[tool.coverage.run]
+source = ["app"]
+branch = true
+omit = ["tests/*", "app/__init__.py"]
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.:",
+    "raise NotImplementedError",
+]
