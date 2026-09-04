@@ -1,4 +1,6 @@
 terraform {
+  required_version = ">= 1.5.0"
+
   required_providers {
     aws = {
       source  = "hashicorp/aws"
@@ -8,12 +10,12 @@ terraform {
 }
 
 provider "aws" {
-  region = var.aws_region
+  region = var.region
 
   default_tags {
     tags = {
-      Project     = "chassiscan"
-      Environment = var.environment
+      Project     = var.project
+      Environment = var.env
       ManagedBy   = "terraform"
     }
   }
