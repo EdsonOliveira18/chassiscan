@@ -9,11 +9,11 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 
-COPY chassiscan ./chassiscan
+COPY app ./app
 COPY pyproject.toml .
 
 EXPOSE 8000
 HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
   CMD curl -fs http://localhost:8000/health || exit 1
 
-CMD ["uvicorn", "chassiscan.api:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "app.api:app", "--host", "0.0.0.0", "--port", "8000"]
