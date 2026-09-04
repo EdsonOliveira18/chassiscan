@@ -4,7 +4,7 @@
 
 **Leitura automatizada de números de chassi (VIN) a partir de imagens, com validação conforme a norma ISO 3779.**
 
-[![CI](https://github.com/EdsonOliveira18/chassiscan/actions/workflows/ci.yml/badge.svg)](https://github.com/EdsonOliveira18/chassiscan/actions/workflows/ci.yml)
+![CI](https://github.com/EdsonOliveira18/chassiscan/actions/workflows/ci.yml/badge.svg?branch=main)
 [![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](https://www.python.org)
 [![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)](https://fastapi.tiangolo.com)
 [![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)](https://www.docker.com)
