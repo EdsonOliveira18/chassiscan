@@ -9,8 +9,9 @@ on:
 permissions:
   contents: read
 
-env:
-  PYTHON_VERSION: "3.12"
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   lint:
@@ -21,8 +22,9 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          python-version: "3.12"
           cache: pip
+          cache-dependency-path: requirements-dev.txt
 
       - name: Instalar ferramentas de lint
         run: pip install ruff==0.8.6 black==24.10.0
@@ -42,13 +44,14 @@ jobs:
 
       - uses: actions/setup-python@v5
         with:
-          python-version: ${{ env.PYTHON_VERSION }}
+          python-version: "3.12"
           cache: pip
+          cache-dependency-path: requirements-dev.txt
 
       - name: Dependências de sistema
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libgl1 libglib2.0-0
+          sudo apt-get install -y --no-install-recommends libgl1 libglib2.0-0t64
 
       - name: Instalar dependências
         run: |
@@ -88,13 +91,27 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Smoke test do container
+        shell: bash
         run: |
-          docker run -d --name chassiscan -p 8000:8000 chassiscan:ci
+          set -euo pipefail
+          docker rm -f chassiscan >/dev/null 2>&1 || true
+          docker run -d --name chassiscan -p 8000:8000 \
+            -e CHASSISCAN_SKIP_WARMUP=1 chassiscan:ci
+
+          ok=0
           for i in $(seq 1 30); do
-            if curl -fsS http://localhost:8000/health; then echo "OK"; exit 0; fi
+            if curl -fsS http://localhost:8000/health; then ok=1; break; fi
             sleep 2
           done
-          echo "Healthcheck falhou"; docker logs chassiscan; exit 1
+
+          if [ "$ok" -ne 1 ]; then
+            echo "Healthcheck falhou"
+            docker logs chassiscan
+            docker rm -f chassiscan || true
+            exit 1
+          fi
+          echo "OK"
+          docker rm -f chassiscan || true
 
   terraform:
     name: Terraform (fmt + validate)
