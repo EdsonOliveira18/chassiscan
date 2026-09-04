@@ -155,22 +155,35 @@ def repair_candidates(vin: str | None, max_edits: int = 1) -> list[str]:
     return out
 
 
-def _score(vin: str) -> tuple[int, int, int]:
+def _score(vin: str, aligned: bool = False) -> tuple[int, int, int, int]:
     """Chave de ordenacao: menor e melhor."""
     return (
         0 if is_valid(vin) else 1,
+        0 if aligned else 1,  # respeita fronteiras do texto original
         0 if checksum_matches(vin) else 1,
         0 if vin[9] in YEAR_CODES else 1,
     )
 
 
+def _aligned_candidates(text: str) -> list[str]:
+    """VINs que ocupam um token inteiro do texto bruto (nao colados a ruido)."""
+    out: list[str] = []
+    for token in _NON_ALNUM.split(text):
+        candidate = normalize(token)
+        if _is_structural(candidate):
+            out.append(candidate)
+    return out
+
+
 def extract_candidates(text: str | None, limit: int = 5) -> list[str]:
     """Extrai possiveis VINs de um texto bruto de OCR, validos primeiro."""
-    if limit <= 0:
+    if limit <= 0 or not text:
         return []
     clean = normalize(text)
     if len(clean) < VIN_LEN:
         return []
+
+    aligned = set(_aligned_candidates(text))
 
     seen: set[str] = set()
     found: list[str] = []
@@ -189,5 +202,6 @@ def extract_candidates(text: str | None, limit: int = 5) -> list[str]:
                     seen.add(fixed)
                     found.append(fixed)
 
-    found.sort(key=_score)  # sort estavel: mantem ordem original nos empates
+    # sort estavel: mantem ordem original nos empates
+    found.sort(key=lambda v: _score(v, v in aligned))
     return found[:limit]
