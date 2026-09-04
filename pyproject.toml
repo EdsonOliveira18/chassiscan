@@ -59,6 +59,7 @@ ignore = ["B008"]  # Depends()/File() como default no FastAPI
 known-first-party = ["app"]
 
 [tool.ruff.lint.per-file-ignores]
+"app/api.py" = ["ARG001"]  # lifespan(app: FastAPI) exigido pela assinatura do FastAPI
 "tests/*" = ["B011", "ARG001", "ARG005", "S101"]
 "conftest.py" = ["E402"]
 
