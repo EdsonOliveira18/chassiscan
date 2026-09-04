@@ -17,10 +17,12 @@ VALID = "1HGCM82633A004352"
         ("IOQ123", "100123"),  # I->1, O->0, Q->0
         ("", ""),
         ("  \n\t", ""),
-        ("vin: 1HGCM82633A004352.", VALID),
-        ("i0o1q", "10011"),
+        # normalize NAO recorta prefixos: "vin" -> "V1N" (I->1)
+        ("vin: 1HGCM82633A004352.", "V1N" + VALID),
+        ("i0o1q", "10010"),  # I->1, 0, O->0, 1, Q->0
         ("!@#$%", ""),  # sem alfanumerico -> vazio
-        ("1HGCM82633A004352", VALID),  # idempotente
+        (VALID, VALID),  # idempotente
+        (None, ""),  # entrada nula
     ],
 )
 def test_normalize(raw, esperado):
@@ -28,7 +30,8 @@ def test_normalize(raw, esperado):
 
 
 def test_normalize_e_idempotente():
-    assert vu.normalize(vu.normalize("1hg-cm iOQ")) == vu.normalize("1hg-cm iOQ")
+    uma = vu.normalize("1hg-cm iOQ")
+    assert vu.normalize(uma) == uma
 
 
 # ---------------------------------------------------------------- checksum
@@ -51,6 +54,11 @@ def test_checksum_ignora_posicao_9():
     assert vu.checksum_digit(alterado) == VALID[8]
 
 
+def test_checksum_matches():
+    assert vu.checksum_matches(VALID)
+    assert not vu.checksum_matches(VALID[:8] + "0" + VALID[9:])
+
+
 # ---------------------------------------------------------------- is_valid
 @pytest.mark.parametrize("vin", [VALID, "11111111111111111", "1M8GDM9AXKP042788"])
 def test_is_valid_true(vin):
@@ -71,10 +79,11 @@ def test_is_valid_false(vin, motivo):
 
 
 @pytest.mark.parametrize("letra", ["I", "O", "Q"])
-def test_is_valid_rejeita_letras_proibidas(letra):
-    """is_valid nao normaliza: recebe VIN ja canonico."""
-    vin = VALID[:16] + letra
-    assert not vu.is_valid(vin)
+def test_letras_proibidas_fora_do_alfabeto(letra):
+    """I/O/Q nao pertencem ao alfabeto VIN; normalize os converte."""
+    bruto = VALID[:16] + letra
+    assert not vu.VIN_REGEX.match(bruto)
+    assert vu.normalize(bruto) == VALID[:16] + vu.INVALID_CHARS[letra]
 
 
 # ---------------------------------------------------------------- extracao
@@ -85,16 +94,25 @@ def test_extract_candidates_prioriza_validos():
 
 
 def test_extract_candidates_ordena_por_validade():
+    """Validos vem antes dos apenas estruturais."""
     invalido = "1HGCM82633A004353"
-    cands = vu.extract_candidates(f"{invalido} lixo {VALID}")
+    cands = vu.extract_candidates(f"{invalido} lixo {VALID}", limit=50)
+    assert cands[0] == VALID
+    assert invalido in cands
     assert cands.index(VALID) < cands.index(invalido)
 
 
-@pytest.mark.parametrize("texto", ["", "abc", "12345", "!!!"])
+def test_extract_candidates_respeita_limit():
+    cands = vu.extract_candidates(f"XX{VALID}YY", limit=1)
+    assert cands == [VALID]
+    assert vu.extract_candidates(f"XX{VALID}YY", limit=0) == []
+
+
+@pytest.mark.parametrize("texto", ["", "abc", "12345", "!!!", None])
 def test_extract_candidates_sem_match(texto):
     assert vu.extract_candidates(texto) == []
 
 
 def test_extract_candidates_sem_duplicatas():
-    cands = vu.extract_candidates(f"{VALID} {VALID}")
+    cands = vu.extract_candidates(f"{VALID} {VALID}", limit=50)
     assert len(cands) == len(set(cands))
