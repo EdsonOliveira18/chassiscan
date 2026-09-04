@@ -15,4 +15,4 @@ tests/fixtures/*.jpg
 *.tfstate
 *.tfstate.*
 *.tfvars
-''
+.ruff_chache/
