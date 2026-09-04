@@ -1,5 +1,4 @@
-"""Acurácia sobre lote rotulado. Coloque as fotos em tests/fixtures/
-com o VIN no nome do arquivo: 1HGCM82633A004352_reflexo.jpg"""
+"""Gate de acuracia do OCR sobre lote rotulado (VIN no nome do arquivo)."""
 
 from pathlib import Path
 
@@ -10,27 +9,52 @@ from app.ocr_engine import read_vin
 
 FIXTURES = Path(__file__).parent / "fixtures"
 MIN_ACCURACY = 0.80
+PADROES = ("*.jpg", "*.jpeg", "*.png", "*.webp")
 
 
-def _lote():
-    if not FIXTURES.exists():
+def _lote() -> list[Path]:
+    if not FIXTURES.is_dir():
         return []
-    return sorted(p for p in FIXTURES.glob("*.jp*g"))
+    return sorted(p for padrao in PADROES for p in FIXTURES.glob(padrao))
 
 
-@pytest.mark.accuracy
-@pytest.mark.skipif(not _lote(), reason="sem fixtures rotuladas")
-def test_acuracia_do_lote():
-    acertos = 0
-    falhas = []
-    for path in _lote():
+LOTE = _lote()
+
+pytestmark = [
+    pytest.mark.accuracy,
+    pytest.mark.slow,
+    pytest.mark.skipif(not LOTE, reason="sem fixtures rotuladas em tests/fixtures/"),
+]
+
+
+@pytest.fixture(scope="module")
+def resultados() -> list[tuple[Path, str, str | None]]:
+    """Roda o OCR uma unica vez por imagem (caro)."""
+    saida = []
+    for path in LOTE:
+        img = cv2.imread(str(path))
+        assert img is not None, f"imagem ilegivel: {path.name}"
         esperado = path.stem.split("_")[0].upper()
-        obtido = read_vin(cv2.imread(str(path))).vin
-        if obtido == esperado:
-            acertos += 1
-        else:
-            falhas.append(f"{path.name}: esperado={esperado} obtido={obtido}")
+        saida.append((path, esperado, read_vin(img).vin))
+    return saida
 
-    taxa = acertos / len(_lote())
-    print(f"\nAcurácia: {taxa:.1%} ({acertos}/{len(_lote())})")
-    assert taxa >= MIN_ACCURACY, "Falhas:\n" + "\n".join(falhas)
+
+def test_acuracia_do_lote(resultados):
+    falhas = [
+        f"  {p.name}: esperado={esp} obtido={obt}" for p, esp, obt in resultados if obt != esp
+    ]
+    acertos = len(resultados) - len(falhas)
+    taxa = acertos / len(resultados)
+
+    assert taxa >= MIN_ACCURACY, (
+        f"Acuracia {taxa:.1%} ({acertos}/{len(resultados)}) < "
+        f"minimo {MIN_ACCURACY:.0%}\nFalhas:\n" + "\n".join(falhas)
+    )
+
+
+def test_lote_tem_rotulos_validos():
+    """Protege o gate contra fixture mal nomeada (que viraria falso negativo)."""
+    invalidos = [
+        p.name for p, esp, _ in ((p, p.stem.split("_")[0], None) for p in LOTE) if len(esp) != 17
+    ]
+    assert not invalidos, f"nomes sem VIN de 17 chars: {invalidos}"

@@ -1,16 +1,38 @@
 """Normalização e validação de VIN (ISO 3779 / 3780)."""
 
+from __future__ import annotations
+
 import re
+from functools import lru_cache
 
 VIN_LEN = 17
-INVALID_CHARS = {"I": "1", "O": "0", "Q": "0"}
-VIN_REGEX = re.compile(r"[A-HJ-NPR-Z0-9]{17}")
 
-TRANSLITERATION = {
-    **{c: i for i, c in enumerate("ABCDEFGHJKLMNPRSTUVWXYZ".replace("", ""), start=0)},
+# I, O, Q nao existem no alfabeto VIN -> confusoes tipicas de OCR
+INVALID_CHARS = {"I": "1", "O": "0", "Q": "0"}
+VIN_REGEX = re.compile(r"^[A-HJ-NPR-Z0-9]{17}$")
+_NON_ALNUM = re.compile(r"[^A-Za-z0-9]")
+
+# Confusoes bidirecionais tipicas em chassi estampado/gravado
+OCR_CONFUSIONS: dict[str, tuple[str, ...]] = {
+    "0": ("D",),
+    "D": ("0",),
+    "1": ("7", "L"),
+    "7": ("1",),
+    "L": ("1",),
+    "2": ("Z",),
+    "Z": ("2",),
+    "5": ("S",),
+    "S": ("5",),
+    "6": ("G",),
+    "G": ("6",),
+    "8": ("B",),
+    "B": ("8",),
+    "4": ("A",),
+    "A": ("4",),
 }
-# tabela oficial
-TRANSLITERATION = {
+
+# Tabela oficial de transliteracao (ISO 3779)
+TRANSLITERATION: dict[str, int] = {
     "A": 1,
     "B": 2,
     "C": 3,
@@ -36,46 +58,150 @@ TRANSLITERATION = {
     "Z": 9,
     **{str(d): d for d in range(10)},
 }
-WEIGHTS = [8, 7, 6, 5, 4, 3, 2, 10, 0, 9, 8, 7, 6, 5, 4, 3, 2]
+
+WEIGHTS = (8, 7, 6, 5, 4, 3, 2, 10, 0, 9, 8, 7, 6, 5, 4, 3, 2)
+CHECK_POSITION = 8  # 9o caractere (indice 0-based)
+
+# WMI cujo pais exige digito verificador (FMVSS 115 / America do Norte)
+CHECKSUM_REQUIRED_PREFIX = ("1", "2", "3", "4", "5", "7")
+
+# Codigos validos para o ano-modelo (posicao 10)
+YEAR_CODES = frozenset("ABCDEFGHJKLMNPRSTVWXY123456789")
 
 
-def normalize(raw: str) -> str:
-    """Remove ruído e troca caracteres proibidos por seus equivalentes."""
+def normalize(raw: str | None) -> str:
+    """Remove ruido e troca caracteres proibidos por seus equivalentes."""
     if not raw:
         return ""
-    text = re.sub(r"[^A-Za-z0-9]", "", raw).upper()
+    text = _NON_ALNUM.sub("", raw).upper()
     return "".join(INVALID_CHARS.get(ch, ch) for ch in text)
 
 
-def checksum_digit(vin: str) -> str | None:
-    """Retorna o dígito verificador esperado (posição 9)."""
-    if len(vin) != VIN_LEN:
+@lru_cache(maxsize=2048)
+def _is_structural(candidate: str) -> bool:
+    """Cache sobre texto JA normalizado: 17 chars no alfabeto VIN."""
+    return bool(VIN_REGEX.match(candidate))
+
+
+def is_structural(vin: str | None) -> bool:
+    """Valida apenas tamanho e alfabeto (ISO 3780). Nao checa digito."""
+    return _is_structural(normalize(vin))
+
+
+def checksum_digit(vin: str | None) -> str | None:
+    """Retorna o digito verificador esperado (posicao 9) ou None se invalido."""
+    candidate = normalize(vin)
+    if len(candidate) != VIN_LEN or not _is_structural(candidate):
         return None
     total = 0
-    for ch, weight in zip(vin, WEIGHTS, strict=True):
-        if ch not in TRANSLITERATION:
+    for ch, weight in zip(candidate, WEIGHTS, strict=True):
+        value = TRANSLITERATION.get(ch)
+        if value is None:
             return None
-        total += TRANSLITERATION[ch] * weight
+        total += value * weight
     rest = total % 11
     return "X" if rest == 10 else str(rest)
 
 
-def is_valid(vin: str) -> bool:
-    """Valida tamanho, alfabeto e dígito verificador."""
-    vin = normalize(vin)
-    if len(vin) != VIN_LEN or not VIN_REGEX.fullmatch(vin):
+def checksum_matches(vin: str | None) -> bool:
+    """True se o digito verificador ISO 3779 confere."""
+    candidate = normalize(vin)
+    expected = checksum_digit(candidate)
+    return expected is not None and expected == candidate[CHECK_POSITION]
+
+
+def requires_checksum(vin: str | None) -> bool:
+    """Checksum e obrigatorio apenas para VIN norte-americano."""
+    candidate = normalize(vin)
+    return len(candidate) == VIN_LEN and candidate[0] in CHECKSUM_REQUIRED_PREFIX
+
+
+@lru_cache(maxsize=2048)
+def _is_valid(candidate: str) -> bool:
+    if not _is_structural(candidate):
         return False
-    return checksum_digit(vin) == vin[8]
+    if candidate[0] in CHECKSUM_REQUIRED_PREFIX:
+        return checksum_matches(candidate)
+    # Fora da America do Norte a posicao 9 e livre: exige-se ano-modelo plausivel
+    return candidate[9] in YEAR_CODES
 
 
-def extract_candidates(text: str, limit: int = 5) -> list[str]:
-    """Extrai possíveis VINs de um texto bruto de OCR."""
+def is_valid(vin: str | None) -> bool:
+    """Valida tamanho, alfabeto e — quando aplicavel — o digito verificador."""
+    return _is_valid(normalize(vin))
+
+
+def is_valid_strict(vin: str | None) -> bool:
+    """Validacao rigida: sempre exige o checksum ISO 3779."""
+    return is_structural(vin) and checksum_matches(vin)
+
+
+def repair_candidates(vin: str | None, max_edits: int = 1) -> list[str]:
+    """Gera variacoes trocando 1 caractere ambiguo, mantendo so as validas."""
+    candidate = normalize(vin)
+    if not _is_structural(candidate) or max_edits < 1:
+        return []
+
+    out: list[str] = []
+    seen: set[str] = {candidate}
+    for i, ch in enumerate(candidate):
+        for alt in OCR_CONFUSIONS.get(ch, ()):
+            fixed = candidate[:i] + alt + candidate[i + 1 :]
+            if fixed in seen or not _is_structural(fixed):
+                continue
+            seen.add(fixed)
+            if is_valid_strict(fixed):
+                out.append(fixed)
+    return out
+
+
+def _score(vin: str, aligned: bool = False) -> tuple[int, int, int, int]:
+    """Chave de ordenacao: menor e melhor."""
+    return (
+        0 if is_valid(vin) else 1,
+        0 if aligned else 1,  # respeita fronteiras do texto original
+        0 if checksum_matches(vin) else 1,
+        0 if vin[9] in YEAR_CODES else 1,
+    )
+
+
+def _aligned_candidates(text: str) -> list[str]:
+    """VINs que ocupam um token inteiro do texto bruto (nao colados a ruido)."""
+    out: list[str] = []
+    for token in _NON_ALNUM.split(text):
+        candidate = normalize(token)
+        if _is_structural(candidate):
+            out.append(candidate)
+    return out
+
+
+def extract_candidates(text: str | None, limit: int = 5) -> list[str]:
+    """Extrai possiveis VINs de um texto bruto de OCR, validos primeiro."""
+    if limit <= 0 or not text:
+        return []
     clean = normalize(text)
-    found, seen = [], set()
+    if len(clean) < VIN_LEN:
+        return []
+
+    aligned = set(_aligned_candidates(text))
+
+    seen: set[str] = set()
+    found: list[str] = []
     for i in range(len(clean) - VIN_LEN + 1):
         window = clean[i : i + VIN_LEN]
-        if VIN_REGEX.fullmatch(window) and window not in seen:
-            seen.add(window)
-            found.append(window)
-    found.sort(key=lambda v: not is_valid(v))  # válidos primeiro
+        if window in seen or not _is_structural(window):
+            continue
+        seen.add(window)
+        found.append(window)
+
+    # tenta reparar 1 caractere ambiguo quando nenhum candidato e valido
+    if not any(is_valid(v) for v in found):
+        for base in list(found):
+            for fixed in repair_candidates(base):
+                if fixed not in seen:
+                    seen.add(fixed)
+                    found.append(fixed)
+
+    # sort estavel: mantem ordem original nos empates
+    found.sort(key=lambda v: _score(v, v in aligned))
     return found[:limit]
