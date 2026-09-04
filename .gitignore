@@ -16,3 +16,6 @@ tests/fixtures/*.jpg
 *.tfstate.*
 *.tfvars
 .ruff_chache/
+coverage.xml
+.coverage
+htmlcov/
