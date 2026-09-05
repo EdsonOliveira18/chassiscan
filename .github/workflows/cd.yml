@@ -1,0 +1,104 @@
+name: CD - Deploy Contínuo
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  security-events: write
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
+
+jobs:
+  # ---------- Estágio 1: Qualidade ----------
+  quality:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12", cache: pip }
+      - run: pip install -r requirements.txt ruff pytest pytest-cov
+      - name: Lint
+        run: ruff check .
+      - name: Testes + cobertura
+        run: pytest --cov=app --cov-report=xml --cov-fail-under=70
+
+  # ---------- Estágio 2: Build & Push ----------
+  build:
+    needs: quality
+    runs-on: ubuntu-latest
+    outputs:
+      digest: ${{ steps.push.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=ref,event=tag
+            type=sha,prefix=sha-
+            type=raw,value=latest
+      - id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ---------- Estágio 3: Segurança ----------
+  security:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Trivy - scan da imagem
+        uses: aquasecurity/trivy-action@0.24.0
+        with:
+          image-ref: ${{ env.IMAGE }}:latest
+          format: sarif
+          output: trivy.sarif
+          severity: CRITICAL,HIGH
+          exit-code: "0"
+      - uses: github/codeql-action/upload-sarif@v3
+        with: { sarif_file: trivy.sarif }
+
+  # ---------- Estágio 4: Deploy Staging ----------
+  deploy-staging:
+    needs: security
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy
+        run: bash scripts/deploy.sh staging ${{ github.ref_name }}
+      - name: Smoke tests
+        run: bash scripts/smoke_test.sh http://localhost:8000
+
+  # ---------- Estágio 5: Deploy Produção ----------
+  deploy-prod:
+    needs: deploy-staging
+    runs-on: ubuntu-latest
+    environment: production   # exige aprovação manual
+    steps:
+      - uses: actions/checkout@v4
+      - name: Deploy produção
+        run: bash scripts/deploy.sh production ${{ github.ref_name }}
+      - name: Smoke tests
+        id: smoke
+        run: bash scripts/smoke_test.sh http://localhost:8000
+      - name: Rollback automático
+        if: failure()
+        run: bash scripts/rollback.sh production
