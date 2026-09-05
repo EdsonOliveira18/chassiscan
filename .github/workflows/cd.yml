@@ -142,14 +142,52 @@ jobs:
     environment:
       name: staging
       url: http://localhost:8000
+    env:
+      GH_OWNER: ${{ github.repository_owner }}
+      IMAGE_NAME: ${{ needs.build.outputs.image }}
+      IMAGE_TAG: ${{ needs.build.outputs.version }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Login no GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Preparar ambiente (.env.prod)
+        env:
+          PG_USER: ${{ secrets.POSTGRES_USER }}
+          PG_PASS: ${{ secrets.POSTGRES_PASSWORD }}
+          PG_DB: ${{ secrets.POSTGRES_DB }}
+          APP_SECRET: ${{ secrets.SECRET_KEY }}
+          DEPLOY_ENV: staging
+        run: |
+          cat > .env.prod <<EOF
+          GH_OWNER=${GH_OWNER}
+          IMAGE_NAME=${IMAGE_NAME}
+          IMAGE_TAG=${IMAGE_TAG}
+          ENVIRONMENT=${DEPLOY_ENV}
+          POSTGRES_USER=${PG_USER:-chassiscan}
+          POSTGRES_PASSWORD=${PG_PASS:-chassiscan123}
+          POSTGRES_DB=${PG_DB:-chassiscan}
+          SECRET_KEY=${APP_SECRET:-ci-dummy-secret-change-me}
+          CHASSISCAN_SKIP_WARMUP=1
+          EOF
+          echo "✅ .env.prod gerado para ${DEPLOY_ENV}"
 
       - name: Deploy staging
         run: bash scripts/deploy.sh staging "${{ needs.build.outputs.version }}"
 
       - name: Smoke tests
         run: bash scripts/smoke_test.sh http://localhost:8000
+
+      - name: Diagnóstico em caso de falha
+        if: failure()
+        run: |
+          docker compose --env-file .env.prod ps || true
+          docker compose --env-file .env.prod logs --tail=100 || true
 
       - name: Rollback automático (staging)
         if: failure()
@@ -161,10 +199,42 @@ jobs:
     needs: [build, deploy-staging]
     runs-on: ubuntu-latest
     environment:
-      name: production        # exige aprovação manual (Required reviewers)
+      name: production # exige aprovação manual (Required reviewers)
       url: http://localhost:8000
+    env:
+      GH_OWNER: ${{ github.repository_owner }}
+      IMAGE_NAME: ${{ needs.build.outputs.image }}
+      IMAGE_TAG: ${{ needs.build.outputs.version }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Login no GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Preparar ambiente (.env.prod)
+        env:
+          PG_USER: ${{ secrets.POSTGRES_USER }}
+          PG_PASS: ${{ secrets.POSTGRES_PASSWORD }}
+          PG_DB: ${{ secrets.POSTGRES_DB }}
+          APP_SECRET: ${{ secrets.SECRET_KEY }}
+          DEPLOY_ENV: production
+        run: |
+          cat > .env.prod <<EOF
+          GH_OWNER=${GH_OWNER}
+          IMAGE_NAME=${IMAGE_NAME}
+          IMAGE_TAG=${IMAGE_TAG}
+          ENVIRONMENT=${DEPLOY_ENV}
+          POSTGRES_USER=${PG_USER:-chassiscan}
+          POSTGRES_PASSWORD=${PG_PASS:-chassiscan123}
+          POSTGRES_DB=${PG_DB:-chassiscan}
+          SECRET_KEY=${APP_SECRET:-ci-dummy-secret-change-me}
+          CHASSISCAN_SKIP_WARMUP=1
+          EOF
+          echo "✅ .env.prod gerado para ${DEPLOY_ENV}"
 
       - name: Deploy produção
         run: bash scripts/deploy.sh production "${{ needs.build.outputs.version }}"
@@ -172,6 +242,12 @@ jobs:
       - name: Smoke tests
         id: smoke
         run: bash scripts/smoke_test.sh http://localhost:8000
+
+      - name: Diagnóstico em caso de falha
+        if: failure()
+        run: |
+          docker compose --env-file .env.prod ps || true
+          docker compose --env-file .env.prod logs --tail=100 || true
 
       - name: Rollback automático
         if: failure()
