@@ -1,6 +1,8 @@
 services:
   api:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile
     image: chassiscan:latest
     container_name: chassiscan-api
     ports:
@@ -8,4 +10,20 @@ services:
     environment:
       CHASSISCAN_MIN_CONF: "0.45"
       CHASSISCAN_MAX_VARIANTS: "6"
+      EASYOCR_MODULE_PATH: "/app/.easyocr"
+    volumes:
+      - easyocr-models:/app/.easyocr
+    healthcheck:
+      test: ["CMD", "curl", "-fs", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 5s
+      start_period: 40s
+      retries: 3
+    deploy:
+      resources:
+        limits:
+          memory: 2G
     restart: unless-stopped
+
+volumes:
+  easyocr-models:

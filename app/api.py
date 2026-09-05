@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, File, HTTPException, UploadFile, status
 from fastapi.concurrency import run_in_threadpool
 from fastapi.middleware.cors import CORSMiddleware
+from prometheus_fastapi_instrumentator import Instrumentator
 from pydantic import BaseModel, Field
 
 from . import __service__, __version__, ocr_engine
@@ -140,3 +141,11 @@ async def ocr_chassi(file: UploadFile = FILE_REQUIRED) -> dict:
         ) from exc
 
     return result.to_dict()
+
+
+# --- Observabilidade: metricas Prometheus em /metrics ---
+# Deve vir DEPOIS das rotas para que todas sejam instrumentadas.
+Instrumentator(
+    should_group_status_codes=False,
+    excluded_handlers=["/metrics", "/health"],
+).instrument(app).expose(app, endpoint="/metrics", include_in_schema=False)
