@@ -1,34 +1,52 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-ENVIRONMENT="${1:?uso: deploy.sh <staging|production> <tag>}"
-TAG="${2:-latest}"
+ENVIRONMENT="${1:?uso: deploy.sh <staging|production> [tag]}"
 COMPOSE="docker-compose.prod.yml"
+ENV_FILE="${ENV_FILE:-.env.prod}"
 STATE_FILE=".deploy_state_${ENVIRONMENT}"
+SERVICE="${SERVICE:-api}"
+CONTAINER="${CONTAINER:-chassiscan-api}"
 
 log() { echo "[$(date -u +%H:%M:%S)] $*"; }
+lower() { tr '[:upper:]' '[:lower:]'; }
 
-log "Iniciando deploy | env=${ENVIRONMENT} tag=${TAG}"
+[[ -f "$ENV_FILE" ]] || { log "ERRO: ${ENV_FILE} não encontrado"; exit 1; }
 
-# 1. Salva a versão atual para permitir rollback
-CURRENT=$(docker inspect --format '{{index .Config.Image}}' chassiscan-api 2>/dev/null || echo "none")
+# Carrega o .env.prod gerado pelo pipeline
+set -a; source "$ENV_FILE"; set +a
+
+# Precedência: argumento > .env.prod > latest
+IMAGE_TAG="$(echo "${2:-${IMAGE_TAG:-latest}}" | lower)"
+IMAGE_NAME="$(echo "${IMAGE_NAME:?IMAGE_NAME não definido}" | lower)"
+GH_OWNER="$(echo "${GH_OWNER:-local}" | lower)"
+export IMAGE_NAME IMAGE_TAG GH_OWNER TAG="$IMAGE_TAG"
+
+DC=(docker compose --env-file "$ENV_FILE" -f "$COMPOSE")
+
+log "Deploy | env=${ENVIRONMENT} image=${IMAGE_NAME}:${IMAGE_TAG}"
+
+# 1. Registra versão atual (imagem completa) para rollback
+CURRENT="$(docker inspect --format '{{.Config.Image}}' "$CONTAINER" 2>/dev/null | lower || true)"
+[[ -z "$CURRENT" ]] && CURRENT="none"
 echo "$CURRENT" > "$STATE_FILE"
 log "Versão anterior registrada: ${CURRENT}"
 
-# 2. Baixa a nova imagem antes de derrubar nada
-export TAG GH_OWNER="${GITHUB_REPOSITORY_OWNER:-local}"
-docker compose -f "$COMPOSE" pull api
+# 2. Puxa a nova imagem antes de derrubar nada
+"${DC[@]}" pull "$SERVICE"
 
-# 3. Sobe com recreação controlada
-docker compose -f "$COMPOSE" up -d --no-deps --force-recreate api
+# 3. Recreação controlada
+"${DC[@]}" up -d --no-deps --force-recreate "$SERVICE"
 
-# 4. Aguarda o healthcheck ficar saudável (máx. 60s)
+# 4. Healthcheck (máx. 60s)
 log "Aguardando health..."
-for i in $(seq 1 20); do
-  STATUS=$(docker inspect --format '{{.State.Health.Status}}' chassiscan-api 2>/dev/null || echo starting)
+for _ in $(seq 1 20); do
+  STATUS="$(docker inspect --format '{{.State.Health.Status}}' "$CONTAINER" 2>/dev/null || echo starting)"
   [[ "$STATUS" == "healthy" ]] && { log "Aplicação saudável ✔"; exit 0; }
+  [[ "$STATUS" == "unhealthy" ]] && { log "ERRO: container unhealthy"; exit 1; }
   sleep 3
 done
 
 log "ERRO: health check não passou em 60s"
+"${DC[@]}" logs --tail=50 "$SERVICE" || true
 exit 1

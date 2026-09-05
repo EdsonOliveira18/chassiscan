@@ -63,7 +63,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       digest: ${{ steps.push.outputs.digest }}
-      version: ${{ steps.meta.outputs.version }}
+      version: ${{ steps.dtag.outputs.tag }}
       image: ${{ steps.img.outputs.image }}
       owner: ${{ steps.img.outputs.owner }}
       image_ref: ${{ steps.img.outputs.image }}@${{ steps.push.outputs.digest }}
@@ -73,8 +73,11 @@ jobs:
       - name: Normalizar nomes (lowercase obrigatório no GHCR)
         id: img
         run: |
-          echo "image=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
-          echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
+          REPO_LC="${GITHUB_REPOSITORY,,}"
+          OWNER_LC="${GITHUB_REPOSITORY_OWNER,,}"
+          echo "image=ghcr.io/${REPO_LC}" >> "$GITHUB_OUTPUT"
+          echo "owner=${OWNER_LC}" >> "$GITHUB_OUTPUT"
+          echo "🔎 image=ghcr.io/${REPO_LC} | owner=${OWNER_LC}"
 
       - uses: docker/setup-buildx-action@v3
 
@@ -92,6 +95,18 @@ jobs:
             type=ref,event=tag
             type=sha,prefix=sha-
             type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Resolver tag de deploy (nunca vazia)
+        id: dtag
+        env:
+          META_VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          V="${META_VERSION,,}"
+          if [[ -z "$V" || "$V" == "null" || "$V" == "none" ]]; then
+            V="latest"
+          fi
+          echo "tag=${V}" >> "$GITHUB_OUTPUT"
+          echo "🏷 tag de deploy: ${V}"
 
       - id: push
         uses: docker/build-push-action@v6
@@ -147,6 +162,7 @@ jobs:
       name: staging
       url: http://localhost:8000
     env:
+      COMPOSE_FILE_PROD: docker-compose.prod.yml
       GH_OWNER: ${{ needs.build.outputs.owner }}
       IMAGE_NAME: ${{ needs.build.outputs.image }}
       IMAGE_TAG: ${{ needs.build.outputs.version }}
@@ -169,21 +185,34 @@ jobs:
           APP_SECRET: ${{ secrets.SECRET_KEY }}
           DEPLOY_ENV: staging
         run: |
-          cat > .env.prod <<EOF
-          GH_OWNER=${GH_OWNER}
-          IMAGE_NAME=${IMAGE_NAME}
-          IMAGE_TAG=${IMAGE_TAG}
-          ENVIRONMENT=${DEPLOY_ENV}
-          POSTGRES_USER=${PG_USER:-chassiscan}
-          POSTGRES_PASSWORD=${PG_PASS:-chassiscan123}
-          POSTGRES_DB=${PG_DB:-chassiscan}
-          SECRET_KEY=${APP_SECRET:-ci-dummy-secret-change-me}
-          CHASSISCAN_SKIP_WARMUP=1
-          EOF
-          echo "✅ .env.prod gerado para ${DEPLOY_ENV}"
+          IMG="${IMAGE_NAME,,}"
+          OWNER_LC="${GH_OWNER,,}"
+          TAG_LC="${IMAGE_TAG,,}"
+          if [[ -z "$TAG_LC" || "$TAG_LC" == "none" || "$TAG_LC" == "null" ]]; then
+            TAG_LC="latest"
+          fi
+
+          {
+            echo "GH_OWNER=${OWNER_LC}"
+            echo "IMAGE_NAME=${IMG}"
+            echo "IMAGE_TAG=${TAG_LC}"
+            echo "TAG=${TAG_LC}"
+            echo "ENVIRONMENT=${DEPLOY_ENV}"
+            echo "POSTGRES_USER=${PG_USER:-chassiscan}"
+            echo "POSTGRES_PASSWORD=${PG_PASS:-chassiscan123}"
+            echo "POSTGRES_DB=${PG_DB:-chassiscan}"
+            echo "SECRET_KEY=${APP_SECRET:-ci-dummy-secret-change-me}"
+            echo "CHASSISCAN_SKIP_WARMUP=1"
+          } > .env.prod
+
+          echo "DEPLOY_TAG=${TAG_LC}" >> "$GITHUB_ENV"
+          echo "✅ .env.prod gerado | ${IMG}:${TAG_LC} (${DEPLOY_ENV})"
+
+      - name: Validar compose
+        run: docker compose --env-file .env.prod -f "$COMPOSE_FILE_PROD" config -q
 
       - name: Deploy staging
-        run: bash scripts/deploy.sh staging "${IMAGE_TAG}"
+        run: bash scripts/deploy.sh staging "${DEPLOY_TAG}"
 
       - name: Smoke tests
         run: bash scripts/smoke_test.sh http://localhost:8000
@@ -191,12 +220,12 @@ jobs:
       - name: Diagnóstico em caso de falha
         if: failure()
         run: |
-          docker compose --env-file .env.prod ps || true
-          docker compose --env-file .env.prod logs --tail=100 || true
+          docker compose --env-file .env.prod -f "$COMPOSE_FILE_PROD" ps || true
+          docker compose --env-file .env.prod -f "$COMPOSE_FILE_PROD" logs --tail=100 || true
 
       - name: Rollback automático (staging)
         if: failure()
-        run: bash scripts/rollback.sh staging "${ROLLBACK_TAG}"
+        run: bash scripts/rollback.sh staging "${ROLLBACK_TAG:-latest}"
 
   # ---------- Estágio 5: Deploy Produção ----------
   deploy-prod:
@@ -207,6 +236,7 @@ jobs:
       name: production # exige aprovação manual (Required reviewers)
       url: http://localhost:8000
     env:
+      COMPOSE_FILE_PROD: docker-compose.prod.yml
       GH_OWNER: ${{ needs.build.outputs.owner }}
       IMAGE_NAME: ${{ needs.build.outputs.image }}
       IMAGE_TAG: ${{ needs.build.outputs.version }}
@@ -229,21 +259,34 @@ jobs:
           APP_SECRET: ${{ secrets.SECRET_KEY }}
           DEPLOY_ENV: production
         run: |
-          cat > .env.prod <<EOF
-          GH_OWNER=${GH_OWNER}
-          IMAGE_NAME=${IMAGE_NAME}
-          IMAGE_TAG=${IMAGE_TAG}
-          ENVIRONMENT=${DEPLOY_ENV}
-          POSTGRES_USER=${PG_USER:-chassiscan}
-          POSTGRES_PASSWORD=${PG_PASS:-chassiscan123}
-          POSTGRES_DB=${PG_DB:-chassiscan}
-          SECRET_KEY=${APP_SECRET:-ci-dummy-secret-change-me}
-          CHASSISCAN_SKIP_WARMUP=1
-          EOF
-          echo "✅ .env.prod gerado para ${DEPLOY_ENV}"
+          IMG="${IMAGE_NAME,,}"
+          OWNER_LC="${GH_OWNER,,}"
+          TAG_LC="${IMAGE_TAG,,}"
+          if [[ -z "$TAG_LC" || "$TAG_LC" == "none" || "$TAG_LC" == "null" ]]; then
+            TAG_LC="latest"
+          fi
+
+          {
+            echo "GH_OWNER=${OWNER_LC}"
+            echo "IMAGE_NAME=${IMG}"
+            echo "IMAGE_TAG=${TAG_LC}"
+            echo "TAG=${TAG_LC}"
+            echo "ENVIRONMENT=${DEPLOY_ENV}"
+            echo "POSTGRES_USER=${PG_USER:-chassiscan}"
+            echo "POSTGRES_PASSWORD=${PG_PASS:-chassiscan123}"
+            echo "POSTGRES_DB=${PG_DB:-chassiscan}"
+            echo "SECRET_KEY=${APP_SECRET:-ci-dummy-secret-change-me}"
+            echo "CHASSISCAN_SKIP_WARMUP=1"
+          } > .env.prod
+
+          echo "DEPLOY_TAG=${TAG_LC}" >> "$GITHUB_ENV"
+          echo "✅ .env.prod gerado | ${IMG}:${TAG_LC} (${DEPLOY_ENV})"
+
+      - name: Validar compose
+        run: docker compose --env-file .env.prod -f "$COMPOSE_FILE_PROD" config -q
 
       - name: Deploy produção
-        run: bash scripts/deploy.sh production "${IMAGE_TAG}"
+        run: bash scripts/deploy.sh production "${DEPLOY_TAG}"
 
       - name: Smoke tests
         id: smoke
@@ -252,18 +295,20 @@ jobs:
       - name: Diagnóstico em caso de falha
         if: failure()
         run: |
-          docker compose --env-file .env.prod ps || true
-          docker compose --env-file .env.prod logs --tail=100 || true
+          docker compose --env-file .env.prod -f "$COMPOSE_FILE_PROD" ps || true
+          docker compose --env-file .env.prod -f "$COMPOSE_FILE_PROD" logs --tail=100 || true
 
       - name: Rollback automático
         if: failure()
-        run: bash scripts/rollback.sh production "${ROLLBACK_TAG}"
+        run: bash scripts/rollback.sh production "${ROLLBACK_TAG:-latest}"
 
       - name: Resumo do deploy
         if: always()
         run: |
-          echo "### Deploy produção" >> $GITHUB_STEP_SUMMARY
-          echo "- Imagem: ${IMAGE_NAME}" >> $GITHUB_STEP_SUMMARY
-          echo "- Versão: ${IMAGE_TAG}" >> $GITHUB_STEP_SUMMARY
-          echo "- Digest: ${{ needs.build.outputs.digest }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Status: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
+          {
+            echo "### Deploy produção"
+            echo "- Imagem: ${IMAGE_NAME,,}"
+            echo "- Versão: ${DEPLOY_TAG:-${IMAGE_TAG}}"
+            echo "- Digest: ${{ needs.build.outputs.digest }}"
+            echo "- Status: ${{ job.status }}"
+          } >> "$GITHUB_STEP_SUMMARY"
