@@ -14,9 +14,6 @@ concurrency:
   group: cd-${{ github.ref }}
   cancel-in-progress: false
 
-env:
-  IMAGE: ghcr.io/${{ github.repository }}
-
 jobs:
   # ---------- Estágio 1: Qualidade ----------
   quality:
@@ -67,9 +64,14 @@ jobs:
     outputs:
       digest: ${{ steps.push.outputs.digest }}
       version: ${{ steps.meta.outputs.version }}
-      image_ref: ${{ env.IMAGE }}@${{ steps.push.outputs.digest }}
+      image: ${{ steps.img.outputs.image }}
+      image_ref: ${{ steps.img.outputs.image }}@${{ steps.push.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
+
+      - name: Nome da imagem em lowercase
+        id: img
+        run: echo "image=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
 
       - uses: docker/setup-buildx-action@v3
 
@@ -82,7 +84,7 @@ jobs:
       - id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ${{ env.IMAGE }}
+          images: ${{ steps.img.outputs.image }}
           tags: |
             type=ref,event=tag
             type=sha,prefix=sha-
@@ -95,7 +97,7 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
-          provenance: true
+          provenance: false
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
@@ -179,6 +181,7 @@ jobs:
         if: always()
         run: |
           echo "### Deploy produção" >> $GITHUB_STEP_SUMMARY
+          echo "- Imagem: ${{ needs.build.outputs.image }}" >> $GITHUB_STEP_SUMMARY
           echo "- Versão: ${{ needs.build.outputs.version }}" >> $GITHUB_STEP_SUMMARY
           echo "- Digest: ${{ needs.build.outputs.digest }}" >> $GITHUB_STEP_SUMMARY
           echo "- Status: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
