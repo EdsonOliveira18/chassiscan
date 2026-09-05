@@ -65,13 +65,16 @@ jobs:
       digest: ${{ steps.push.outputs.digest }}
       version: ${{ steps.meta.outputs.version }}
       image: ${{ steps.img.outputs.image }}
+      owner: ${{ steps.img.outputs.owner }}
       image_ref: ${{ steps.img.outputs.image }}@${{ steps.push.outputs.digest }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Nome da imagem em lowercase
+      - name: Normalizar nomes (lowercase obrigatório no GHCR)
         id: img
-        run: echo "image=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+        run: |
+          echo "image=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
+          echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> "$GITHUB_OUTPUT"
 
       - uses: docker/setup-buildx-action@v3
 
@@ -110,7 +113,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Trivy - scan da imagem (SARIF)
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ needs.build.outputs.image_ref }}
           format: sarif
@@ -120,13 +123,14 @@ jobs:
           exit-code: "0"
 
       - name: Enviar SARIF para Code Scanning
+        if: always()
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: trivy.sarif
           category: trivy-image
 
       - name: Trivy - gate (falha em CRITICAL)
-        uses: aquasecurity/trivy-action@master
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           image-ref: ${{ needs.build.outputs.image_ref }}
           format: table
@@ -143,9 +147,10 @@ jobs:
       name: staging
       url: http://localhost:8000
     env:
-      GH_OWNER: ${{ github.repository_owner }}
+      GH_OWNER: ${{ needs.build.outputs.owner }}
       IMAGE_NAME: ${{ needs.build.outputs.image }}
       IMAGE_TAG: ${{ needs.build.outputs.version }}
+      ROLLBACK_TAG: latest
     steps:
       - uses: actions/checkout@v4
 
@@ -178,7 +183,7 @@ jobs:
           echo "✅ .env.prod gerado para ${DEPLOY_ENV}"
 
       - name: Deploy staging
-        run: bash scripts/deploy.sh staging "${{ needs.build.outputs.version }}"
+        run: bash scripts/deploy.sh staging "${IMAGE_TAG}"
 
       - name: Smoke tests
         run: bash scripts/smoke_test.sh http://localhost:8000
@@ -191,7 +196,7 @@ jobs:
 
       - name: Rollback automático (staging)
         if: failure()
-        run: bash scripts/rollback.sh staging
+        run: bash scripts/rollback.sh staging "${ROLLBACK_TAG}"
 
   # ---------- Estágio 5: Deploy Produção ----------
   deploy-prod:
@@ -202,9 +207,10 @@ jobs:
       name: production # exige aprovação manual (Required reviewers)
       url: http://localhost:8000
     env:
-      GH_OWNER: ${{ github.repository_owner }}
+      GH_OWNER: ${{ needs.build.outputs.owner }}
       IMAGE_NAME: ${{ needs.build.outputs.image }}
       IMAGE_TAG: ${{ needs.build.outputs.version }}
+      ROLLBACK_TAG: latest
     steps:
       - uses: actions/checkout@v4
 
@@ -237,7 +243,7 @@ jobs:
           echo "✅ .env.prod gerado para ${DEPLOY_ENV}"
 
       - name: Deploy produção
-        run: bash scripts/deploy.sh production "${{ needs.build.outputs.version }}"
+        run: bash scripts/deploy.sh production "${IMAGE_TAG}"
 
       - name: Smoke tests
         id: smoke
@@ -251,13 +257,13 @@ jobs:
 
       - name: Rollback automático
         if: failure()
-        run: bash scripts/rollback.sh production
+        run: bash scripts/rollback.sh production "${ROLLBACK_TAG}"
 
       - name: Resumo do deploy
         if: always()
         run: |
           echo "### Deploy produção" >> $GITHUB_STEP_SUMMARY
-          echo "- Imagem: ${{ needs.build.outputs.image }}" >> $GITHUB_STEP_SUMMARY
-          echo "- Versão: ${{ needs.build.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Imagem: ${IMAGE_NAME}" >> $GITHUB_STEP_SUMMARY
+          echo "- Versão: ${IMAGE_TAG}" >> $GITHUB_STEP_SUMMARY
           echo "- Digest: ${{ needs.build.outputs.digest }}" >> $GITHUB_STEP_SUMMARY
           echo "- Status: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
