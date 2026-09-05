@@ -1,0 +1,218 @@
+{
+  "$schema": "chassiscan-progress/v2",
+  "meta": {
+    "projeto": "ChassiScan",
+    "descricao": "Leitura automatizada de números de chassi (VIN) com validação ISO 3779",
+    "autor": "Edson",
+    "disciplina": "DevOps & Integração Contínua — ADS",
+    "instituicao": "PUCRS Online",
+    "repositorio": "https://github.com/EdsonOliveira18/chassiscan",
+    "versao": "v2.0.0-fase2",
+    "prazo_dias": 3,
+    "atualizado_em": "2026-09-04"
+  },
+  "stack": {
+    "linguagem": "Python 3.12",
+    "api": "FastAPI + Uvicorn",
+    "ocr": "Tesseract OCR",
+    "imagem": "OpenCV / Pillow",
+    "testes": "Pytest + pytest-cov",
+    "qualidade": "Ruff + Black",
+    "container": "Docker multi-stage + Compose",
+    "orquestracao": "ECS (rolling update) / Kubernetes (Deployment + HPA)",
+    "iac": "Terraform (AWS)",
+    "ci_cd": "GitHub Actions",
+    "registry": "Amazon ECR (imutável, scan on push)",
+    "seguranca": "Trivy + OIDC + SBOM + provenance",
+    "observabilidade": "Prometheus + Grafana + Loki + Promtail"
+  },
+  "kpis": [
+    { "label": "Estágios do CD", "valor": "5" },
+    { "label": "Métricas expostas", "valor": "4" },
+    { "label": "Scanners de segurança", "valor": "3" },
+    { "label": "Rubrica máxima", "valor": "6,0" }
+  ],
+  "cronograma": [
+    { "dia": 1, "foco": "Entrega Contínua + Segurança", "status": "concluido",
+      "entregaveis": [".github/workflows/cd.yml", "infra/oidc.tf", ".trivyignore"] },
+    { "dia": 2, "foco": "Containers, Orquestração e Observabilidade", "status": "em_andamento",
+      "entregaveis": ["Dockerfile", "docker-compose.prod.yml", "k8s/deployment.yaml", "scripts/*.sh", "app/observability.py"] },
+    { "dia": 3, "foco": "Relatório, Fluxograma e Análise", "status": "pendente",
+      "entregaveis": ["Seção 3a", "Seção 3b (Mermaid)", "Seção 3c", "PDF final"] }
+  ],
+  "fases": [
+    {
+      "id": "fase1",
+      "titulo": "Fase 1 — Configuração e Automação Inicial",
+      "status": "concluida",
+      "versao": "v1.0.0-fase1",
+      "entregas": [
+        { "item": "Versionamento Git, Conventional Commits, branch main protegida, template de PR", "status": "ok" },
+        { "item": "Containerização inicial: Dockerfile multi-stage + docker-compose", "status": "ok" },
+        { "item": "IaC com Terraform: backend S3 + lock DynamoDB, ambientes dev/prod via tfvars", "status": "ok" },
+        { "item": "Testes automatizados com marcadores unit, integration e accuracy + cobertura", "status": "ok" },
+        { "item": "Pipeline de CI: lint → test → docker build → terraform validate", "status": "ok" }
+      ]
+    },
+    {
+      "id": "fase2",
+      "titulo": "Fase 2 — Entrega Contínua, Monitoramento e Segurança",
+      "status": "em_andamento",
+      "secoes": [
+        {
+          "id": "1a",
+          "criterio": 1,
+          "titulo": "Expansão do pipeline de CI para Entrega Contínua",
+          "dia": 1,
+          "status": "concluido",
+          "artefatos": [".github/workflows/cd.yml", "infra/oidc.tf"],
+          "gatilhos": {
+            "push_main": "deploy automático em dev",
+            "tag_v*": "deploy em prod com aprovação manual",
+            "workflow_dispatch": "deploy manual com escolha de ambiente"
+          },
+          "estagios": [
+            { "ordem": 1, "job": "ci-gate", "ferramentas": ["Ruff", "Black", "Pytest + coverage"], "gate": "bloqueante" },
+            { "ordem": 2, "job": "security", "ferramentas": ["Trivy fs (vuln, secret, misconfig)", "SARIF → GitHub Security"], "gate": "bloqueante em HIGH/CRITICAL" },
+            { "ordem": 3, "job": "build-and-push", "ferramentas": ["Docker Buildx", "cache GHA", "SBOM", "provenance", "Amazon ECR"], "gate": "bloqueante" },
+            { "ordem": 4, "job": "deploy-dev", "estrategia": "rolling update por digest", "gate": "automático", "pos": "smoke test" },
+            { "ordem": 5, "job": "deploy-prod", "estrategia": "rolling update por digest", "gate": "aprovação manual (Environment)", "pos": "smoke test + rollback automático" }
+          ],
+          "rastreabilidade": "commit → tag → digest sha256 → revisão implantada"
+        },
+        {
+          "id": "2a",
+          "criterio": 2,
+          "titulo": "Containerização da aplicação com Docker",
+          "dia": 2,
+          "status": "concluido",
+          "artefatos": ["Dockerfile", ".dockerignore", "docker-compose.yml", "docker-compose.prod.yml"],
+          "base": "python:3.12-slim",
+          "estagios_build": ["builder (compila deps em venv isolado)", "runtime (apenas venv + Tesseract + libs nativas)"],
+          "hardening": [
+            "build multi-stage sem toolchain no runtime",
+            "usuário não-root UID 10001",
+            "readOnlyRootFilesystem + tmpfs em /tmp",
+            "cap_drop ALL e no-new-privileges",
+            "HEALTHCHECK nativo em /health",
+            "labels OCI com versão e SHA do commit",
+            "limites de CPU e memória declarados"
+          ]
+        },
+        {
+          "id": "2b",
+          "criterio": 2,
+          "titulo": "Scripts de deploy usando containers",
+          "dia": 2,
+          "status": "em_andamento",
+          "artefatos": [
+            { "arquivo": "scripts/deploy.sh", "funcao": "registra task definition com imagem por digest, rolling update com maxUnavailable 0 e aguarda estabilização" },
+            { "arquivo": "scripts/rollback.sh", "funcao": "restaura a revisão anterior persistida antes do deploy" },
+            { "arquivo": "scripts/smoke_test.sh", "funcao": "valida /health, /docs e /vin/extract com retentativas" },
+            { "arquivo": "k8s/deployment.yaml", "funcao": "Deployment + HPA + startup/liveness/readiness probes" },
+            { "arquivo": "docker-compose.prod.yml", "funcao": "réplicas, limites de recurso e stack de observabilidade" }
+          ]
+        },
+        {
+          "id": "obs",
+          "criterio": 3,
+          "titulo": "Monitoramento e Logging",
+          "dia": 2,
+          "status": "em_andamento",
+          "artefatos": ["app/observability.py", "observability/prometheus.yml", "observability/promtail.yml"],
+          "logging": "JSON estruturado em stdout com request_id propagado via X-Request-ID",
+          "metricas": [
+            { "nome": "chassiscan_requests_total", "tipo": "Counter", "uso": "volume de requisições e taxa de erro 5xx" },
+            { "nome": "chassiscan_request_seconds", "tipo": "Histogram", "uso": "latência p95 e p99" },
+            { "nome": "chassiscan_ocr_confidence", "tipo": "Histogram", "uso": "degradação da qualidade do OCR" },
+            { "nome": "chassiscan_vin_invalid_total", "tipo": "Counter", "uso": "VINs reprovados na validação ISO 3779" }
+          ],
+          "alertas": ["p95 > 1,5s por 5 min", "taxa de 5xx > 2%", "confiança média do OCR < 0,70", "container reiniciando em loop"]
+        },
+        {
+          "id": "sec",
+          "criterio": 1,
+          "titulo": "Segurança em DevOps",
+          "dia": 1,
+          "status": "concluido",
+          "controles": [
+            "autenticação OIDC na AWS, sem chaves estáticas no repositório",
+            "role IAM com least privilege restrita ao repositório via condition sub",
+            "Trivy para vulnerabilidades, segredos e misconfigurations de IaC",
+            "ECR com tag imutável, scan on push e criptografia em repouso",
+            "geração de SBOM e provenance SLSA na build",
+            "deploy sempre por digest, nunca por tag mutável",
+            "segredos fora do código, via GitHub Secrets e variáveis de ambiente"
+          ]
+        },
+        {
+          "id": "3a",
+          "criterio": 3,
+          "titulo": "Relatório detalhado de todas as etapas (Fases 1 e 2)",
+          "dia": 3,
+          "status": "pendente"
+        },
+        {
+          "id": "3b",
+          "criterio": 3,
+          "titulo": "Fluxograma com demonstração do fluxo DevOps",
+          "dia": 3,
+          "status": "pendente",
+          "formato": "Mermaid flowchart TD"
+        },
+        {
+          "id": "3c",
+          "criterio": 3,
+          "titulo": "Análise dos resultados e melhorias futuras",
+          "dia": 3,
+          "status": "pendente",
+          "comparativo": [
+            { "indicador": "Deploy", "fase1": "Manual", "fase2": "Automatizado em dev, aprovado em prod" },
+            { "indicador": "Lead time para produção", "fase1": "Horas", "fase2": "Minutos" },
+            { "indicador": "Rollback", "fase1": "Manual e incerto", "fase2": "Automático em menos de 2 min" },
+            { "indicador": "Credenciais na nuvem", "fase1": "Chaves estáticas", "fase2": "OIDC efêmero" },
+            { "indicador": "Visibilidade em runtime", "fase1": "Logs de texto", "fase2": "Logs JSON + métricas + dashboards" },
+            { "indicador": "Segurança", "fase1": "Apenas lint e testes", "fase2": "Trivy + SBOM + provenance" }
+          ],
+          "limitacoes": [
+            "Rolling update sem tráfego sombreado: regressões só aparecem após exposição real",
+            "Gate de acurácia do OCR sobre dataset reduzido, com risco de falsa confiança",
+            "Ausência de testes de carga: limites de CPU e memória foram estimados",
+            "Manifests Kubernetes aplicados de forma imperativa, sem reconciliação de desvio",
+            "Sem SLO formal nem error budget orientando decisões de release"
+          ],
+          "melhorias": [
+            "Deploy canário com análise automática de métricas (Argo Rollouts ou CodeDeploy)",
+            "GitOps com ArgoCD para eliminar drift de configuração",
+            "Assinatura de imagens com Cosign e política de admissão Kyverno/OPA",
+            "Tracing distribuído com OpenTelemetry correlacionado por X-Request-ID",
+            "SLOs versionados (99,5% disponibilidade, p95 < 1,5s, acurácia >= 95%) com alertas de burn rate",
+            "Testes de carga com k6 como gate de performance antes da promoção",
+            "Migração de segredos para AWS Secrets Manager com rotação automática",
+            "Instrumentação das métricas DORA para medir a evolução da engenharia"
+          ]
+        }
+      ]
+    }
+  ],
+  "checklist_entrega": [
+    { "item": "cd.yml commitado e run verde na branch main", "feito": false },
+    { "item": "Secret AWS_ROLE_TO_ASSUME configurado", "feito": false },
+    { "item": "Environments dev e prod criados, prod com required reviewers", "feito": false },
+    { "item": "Repositório ECR criado com tag imutável", "feito": false },
+    { "item": "Dockerfile com hardening validado (docker compose up)", "feito": false },
+    { "item": "Scripts com bash -n e chmod +x aplicados", "feito": false },
+    { "item": "Stack de observabilidade subindo (Prometheus + Grafana + Loki)", "feito": false },
+    { "item": "Tag v2.0.0-fase2 criada disparando o CD", "feito": false },
+    { "item": "Prints: run do CD, aba Security, dashboard Grafana", "feito": false },
+    { "item": "Relatório 3a escrito e revisado", "feito": false },
+    { "item": "Fluxograma renderizado e exportado em imagem", "feito": false },
+    { "item": "README atualizado com roadmap da Fase 2 marcado", "feito": false },
+    { "item": "PDF final montado no modelo dos professores", "feito": false }
+  ],
+  "rubrica": [
+    { "criterio": 1, "descricao": "Pipeline de entrega contínua", "valor_max": 2, "evidencias": ["cd.yml", "print do run", "Environments"] },
+    { "criterio": 2, "descricao": "Containers e orquestração", "valor_max": 2, "evidencias": ["Dockerfile", "scripts/", "k8s/", "link do repositório"] },
+    { "criterio": 3, "descricao": "Relatório final e demonstração", "valor_max": 2, "evidencias": ["Seções 3a, 3b, 3c", "fluxograma", "análise crítica"] }
+  ]
+}

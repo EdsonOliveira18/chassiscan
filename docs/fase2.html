@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ChassiScan · Painel Fase 2</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
+<style>
+:root{--azul:#3b4a9c;--dourado:#a9803f;--bg:#f6f7fb;--card:#fff;--txt:#1e2340;--mut:#6b7280;--line:#e7e9f2}
+*{box-sizing:border-box}
+body{margin:0;font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--txt);line-height:1.6}
+header{background:var(--card);padding:24px 32px;border-bottom:3px solid var(--dourado)}
+h1{margin:0;font-size:1.6rem;color:var(--azul)}
+header small{color:var(--mut)}
+nav{display:flex;gap:6px;flex-wrap:wrap;background:var(--card);padding:10px 32px;border-bottom:1px solid var(--line);position:sticky;top:0;z-index:9}
+nav button{border:1px solid var(--line);background:#fff;padding:7px 14px;border-radius:20px;cursor:pointer;font-size:.85rem;color:var(--mut)}
+nav button.on{background:var(--azul);color:#fff;border-color:var(--azul)}
+main{max-width:1080px;margin:0 auto;padding:24px 20px}
+.grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));margin-bottom:22px}
+.kpi{background:var(--card);border-radius:10px;padding:16px;border-left:4px solid var(--dourado)}
+.kpi b{display:block;font-size:1.5rem;color:var(--azul)}
+.kpi span{font-size:.8rem;color:var(--mut)}
+section{background:var(--card);border-radius:10px;padding:20px 24px;margin-bottom:18px;box-shadow:0 1px 3px #0000000d}
+h2{color:var(--azul);font-size:1.1rem;margin:0 0 12px;border-bottom:1px solid var(--line);padding-bottom:8px}
+h3{color:var(--dourado);font-size:.95rem;margin:16px 0 4px}
+table{width:100%;border-collapse:collapse;font-size:.88rem}
+th,td{padding:8px 10px;border-bottom:1px solid #f0f1f6;text-align:left;vertical-align:top}
+th{background:#f1f2f9;color:var(--azul);font-size:.75rem;text-transform:uppercase;letter-spacing:.4px}
+.tag{padding:2px 9px;border-radius:20px;font-size:.7rem;font-weight:700;white-space:nowrap}
+.concluido,.concluida,.ok{background:#d9f5e5;color:#15653f}
+.em_andamento{background:#fdf0c8;color:#8a5b00}
+.pendente{background:#e8eaf1;color:#525a6e}
+.bar{height:9px;background:var(--line);border-radius:6px;overflow:hidden;margin:4px 0 14px}
+.bar>i{display:block;height:100%;background:linear-gradient(90deg,var(--dourado),var(--azul))}
+ul{margin:4px 0 0 18px;padding:0}li{margin-bottom:4px}
+code{background:#f2f3f9;padding:1px 5px;border-radius:4px;font-size:.83rem}
+label.ck{display:flex;gap:9px;align-items:flex-start;padding:6px 0;border-bottom:1px dashed var(--line);font-size:.88rem;cursor:pointer}
+.mermaid{background:#fbfbfe;border:1px solid var(--line);border-radius:8px;padding:12px;text-align:center}
+.hide{display:none}
+footer{text-align:center;color:var(--mut);font-size:.78rem;padding:22px}
+</style>
+</head>
+<body>
+<header>
+  <h1>🔎 ChassiScan · Painel da Fase 2</h1>
+  <small id="sub"></small>
+</header>
+<nav id="nav"></nav>
+<main>
+  <div class="grid" id="kpis"></div>
+  <div id="view"></div>
+</main>
+<footer id="foot"></footer>
+
+<script id="dados" type="application/json">
+{"meta":{"projeto":"ChassiScan","autor":"Edson","disciplina":"DevOps & Integração Contínua — ADS","repositorio":"https://github.com/EdsonOliveira18/chassiscan","versao":"v2.0.0-fase2","prazo_dias":3},
+"kpis":[{"label":"Estágios do CD","valor":"5"},{"label":"Métricas expostas","valor":"4"},{"label":"Scanners de segurança","valor":"3"},{"label":"Rubrica máxima","valor":"6,0"}],
+"cronograma":[{"dia":1,"foco":"Entrega Contínua + Segurança","status":"concluido","entregaveis":[".github/workflows/cd.yml","infra/oidc.tf",".trivyignore"]},{"dia":2,"foco":"Containers, Orquestração e Observabilidade","status":"em_andamento","entregaveis":["Dockerfile","docker-compose.prod.yml","k8s/deployment.yaml","scripts/*.sh","app/observability.py"]},{"dia":3,"foco":"Relatório, Fluxograma e Análise","status":"pendente","entregaveis":["Seção 3a","Seção 3b","Seção 3c","PDF final"]}],
+"fase1":[{"item":"Versionamento Git, Conventional Commits, branch protegida, template de PR","status":"ok"},{"item":"Containerização inicial (Dockerfile multi-stage + Compose)","status":"ok"},{"item":"IaC com Terraform (S3 + DynamoDB lock, dev/prod)","status":"ok"},{"item":"Testes unit, integration e accuracy com cobertura","status":"ok"},{"item":"Pipeline de CI: lint, test, docker, terraform","status":"ok"}],
+"estagios":[{"ordem":1,"job":"ci-gate","ferramentas":"Ruff, Black, Pytest + coverage","gate":"bloqueante"},{"ordem":2,"job":"security","ferramentas":"Trivy fs (vuln, secret, misconfig) → SARIF","gate":"bloqueante em HIGH/CRITICAL"},{"ordem":3,"job":"build-and-push","ferramentas":"Buildx, cache GHA, SBOM, provenance, ECR","gate":"bloqueante"},{"ordem":4,"job":"deploy-dev","ferramentas":"ECS rolling update por digest + smoke test","gate":"automático"},{"ordem":5,"job":"deploy-prod","ferramentas":"ECS rolling update + rollback automático","gate":"aprovação manual (tag v*)"}],
+"hardening":["build multi-stage sem toolchain no runtime","usuário não-root UID 10001","readOnlyRootFilesystem + tmpfs em /tmp","cap_drop ALL e no-new-privileges","HEALTHCHECK nativo em /health","labels OCI com versão e SHA","limites de CPU e memória declarados"],
+"scripts":[["scripts/deploy.sh","Registra task definition com imagem por digest, rolling update com maxUnavailable 0 e espera estabilização"],["scripts/rollback.sh","Restaura a revisão anterior persistida antes do deploy"],["scripts/smoke_test.sh","Valida /health, /docs e /vin/extract com retentativas"],["k8s/deployment.yaml","Deployment + HPA + startup/liveness/readiness probes"],["docker-compose.prod.yml","Réplicas, limites de recurso e stack de observabilidade"]],
+"metricas":[["chassiscan_requests_total","Counter","Volume e taxa de erro 5xx"],["chassiscan_request_seconds","Histogram","Latência p95 e p99"],["chassiscan_ocr_confidence","Histogram","Degradação da qualidade do OCR"],["chassiscan_vin_invalid_total","Counter","VINs reprovados na ISO 3779"]],
+"seguranca":["Autenticação OIDC na AWS, sem chaves estáticas","Role IAM least privilege restrita ao repositório","Trivy: vulnerabilidades, segredos e IaC","ECR com tag imutável, scan on push e criptografia","SBOM e provenance SLSA na build","Deploy sempre por digest sha256","Segredos via GitHub Secrets e Environments"],
+"comparativo":[["Deploy","Manual","Automatizado em dev, aprovado em prod"],["Lead time para produção","Horas","Minutos"],["Rollback","Manual e incerto","Automático em menos de 2 min"],["Credenciais na nuvem","Chaves estáticas","OIDC efêmero"],["Visibilidade em runtime","Logs de texto","Logs JSON + métricas + dashboards"],["Segurança","Apenas lint e testes","Trivy + SBOM + provenance"]],
+"limitacoes":["Rolling update sem tráfego sombreado","Gate de acurácia sobre dataset reduzido","Ausência de testes de carga: limites estimados","Manifests K8s imperativos, sem reconciliação","Sem SLO formal nem error budget"],
+"melhorias":["Deploy canário com análise automática de métricas","GitOps com ArgoCD para eliminar drift","Assinatura com Cosign + política Kyverno/OPA","Tracing distribuído com OpenTelemetry","SLOs versionados com alertas de burn rate","Testes de carga com k6 como gate","Secrets Manager com rotação automática","Métricas DORA instrumentadas"],
+"checklist":["cd.yml commitado e run verde na main","Secret AWS_ROLE_TO_ASSUME configurado","Environments dev e prod (prod com reviewers)","Repositório ECR criado com tag imutável","Dockerfile validado com docker compose up","Scripts com bash -n e chmod +x","Stack de observabilidade subindo","Tag v2.0.0-fase2 disparando o CD","Prints: run do CD, Security, Grafana","Relatório 3a escrito e revisado","Fluxograma exportado em imagem","README com roadmap da Fase 2 marcado","PDF final montado no modelo"],
+"rubrica":[[1,"Pipeline de entrega contínua",2,"cd.yml, print do run, Environments"],[2,"Containers e orquestração",2,"Dockerfile, scripts/, k8s/, link do repo"],[3,"Relatório final e demonstração",2,"Seções 3a/3b/3c, fluxograma, análise"]],
+"fluxograma":"flowchart TD\n A[Dev branch feat/*] --> B[Commit Conventional]\n B --> C[Pull Request]\n C --> D{CI}\n D --> D1[Ruff + Black]\n D --> D2[Pytest + Coverage]\n D --> D3[Docker Build]\n D --> D4[Terraform validate]\n D -->|falha| C\n D -->|verde| E[Merge main protegida]\n E --> F{CD}\n F --> G[Quality Gate]\n G --> H[Trivy vuln secret IaC]\n H -->|HIGH/CRITICAL| X[Pipeline abortado]\n H -->|limpo| I[Build + SBOM + Provenance]\n I --> J[(Amazon ECR imutavel)]\n J --> K[Deploy DEV rolling update]\n K --> L{Smoke Test}\n L -->|falha| R[Rollback automatico]\n L -->|ok| M{Tag v*?}\n M -->|nao| Z[Fim ambiente dev]\n M -->|sim| N[Aprovacao manual prod]\n N --> O[Deploy PROD rolling update]\n O --> P{Smoke Test}\n P -->|falha| R\n P -->|ok| Q[Observabilidade]\n Q --> Q1[Logs JSON Loki]\n Q --> Q2[Metricas Prometheus Grafana]\n Q2 --> S[Alertas latencia 5xx confianca OCR]\n S --> A"}
+</script>
+
+<script>
+const D = JSON.parse(document.getElementById('dados').textContent);
+const t = (s) => `<span class="tag ${s}">${s.replace('_',' ')}</span>`;
+const tbl = (h, rows) => `<table><tr>${h.map(x=>`<th>${x}</th>`).join('')}</tr>${rows.map(r=>`<tr>${r.map(c=>`<td>${c}</td>`).join('')}</tr>`).join('')}</table>`;
+const lst = (a) => `<ul>${a.map(x=>`<li>${x}</li>`).join('')}</ul>`;
+
+document.getElementById('sub').textContent =
+  `${D.meta.disciplina} · ${D.meta.autor} · ${D.meta.versao} · prazo ${D.meta.prazo_dias} dias`;
+document.getElementById('foot').textContent = `${D.meta.projeto} · ${D.meta.repositorio}`;
+document.getElementById('kpis').innerHTML =
+  D.kpis.map(k=>`<div class="kpi"><b>${k.valor}</b><span>${k.label}</span></div>`).join('');
+
+const views = {
+  'Visão geral': () => {
+    const done = D.cronograma.filter(c=>c.status==='concluido').length;
+    return `<section><h2>Progresso do cronograma</h2>
+      <div class="bar"><i style="width:${Math.round(done/D.cronograma.length*100)}%"></i></div>
+      ${tbl(['Dia','Foco','Entregáveis','Status'], D.cronograma.map(c=>[c.dia,c.foco,c.entregaveis.map(e=>`<code>${e}</code>`).join(' '),t(c.status)]))}
+    </section>
+    <section><h2>Rubrica e evidências</h2>
+      ${tbl(['Critério','Descrição','Valor','Evidências'], D.rubrica.map(r=>[r[0],r[1],r[2],r[3]]))}
+    </section>
+    <section><h2>Fase 1 — concluída</h2>
+      ${tbl(['Entrega','Status'], D.fase1.map(f=>[f.item,t(f.status)]))}
+    </section>`;
+  },
+  '1a · Pipeline CD': () => `<section><h2>Estágios do pipeline de Entrega Contínua</h2>
+      ${tbl(['#','Job','Ferramentas','Gate'], D.estagios.map(e=>[e.ordem,`<code>${e.job}</code>`,e.ferramentas,e.gate]))}
+      <h3>Gatilhos</h3>${lst(['<code>push</code> na main → deploy automático em <b>dev</b>','tag <code>v*</code> → deploy em <b>prod</b> com aprovação manual','<code>workflow_dispatch</code> → deploy manual com escolha de ambiente'])}
+      <h3>Rastreabilidade</h3><p>commit → tag → digest <code>sha256</code> → revisão implantada.</p>
+    </section>
+    <section><h2>Segurança aplicada</h2>${lst(D.seguranca)}</section>`,
+  '2 · Containers': () => `<section><h2>2a · Containerização</h2>
+      <p>Base <code>python:3.12-slim</code> em build multi-stage: o estágio <i>builder</i> compila as dependências em um virtualenv isolado e o <i>runtime</i> recebe apenas o venv, o Tesseract e as bibliotecas nativas.</p>
+      ${lst(D.hardening)}</section>
+    <section><h2>2b · Scripts de deploy</h2>${tbl(['Artefato','Função'], D.scripts.map(s=>[`<code>${s[0]}</code>`,s[1]]))}</section>`,
+  'Observabilidade': () => `<section><h2>Monitoramento e Logging</h2>
+      ${tbl(['Métrica','Tipo','Uso'], D.metricas.map(m=>[`<code>${m[0]}</code>`,m[1],m[2]]))}
+      <h3>Logging</h3><p>JSON estruturado em stdout com <code>request_id</code> propagado via <code>X-Request-ID</code>, coletado por Promtail e consultado no Loki.</p></section>`,
+  '3b · Fluxograma': () => `<section><h2>Fluxo DevOps completo</h2><div class="mermaid">${D.fluxograma}</div></section>`,
+  '3c · Análise': () => `<section><h2>Resultados: Fase 1 vs Fase 2</h2>
+      ${tbl(['Indicador','Fase 1','Fase 2'], D.comparativo)}
+      <h3>Limitações identificadas</h3>${lst(D.limitacoes)}
+      <h3>Melhorias futuras</h3>${lst(D.melhorias)}</section>`,
+  'Checklist': () => `<section><h2>Checklist de entrega</h2><div id="ck">${
+      D.checklist.map((c,i)=>`<label class="ck"><input type="checkbox" data-i="${i}"><span>${c}</span></label>`).join('')
+    }</div><div class="bar" style="margin-top:12px"><i id="ckbar" style="width:0"></i></div>
+    <small id="ckt" style="color:var(--mut)"></small></section>`
+};
+
+const nav = document.getElementById('nav'), view = document.getElementById('view');
+Object.keys(views).forEach((k,i)=>{
+  const b = document.createElement('button');
+  b.textContent = k; b.onclick = ()=>show(k,b);
+  nav.appendChild(b); if(i===0) setTimeout(()=>show(k,b),0);
+});
+
+function show(k, btn){
+  [...nav.children].forEach(b=>b.classList.remove('on'));
+  btn.classList.add('on');
+  view.innerHTML = views[k]();
+  if(k.includes('Fluxograma')) mermaid.init(undefined, view.querySelectorAll('.mermaid'));
+  if(k === 'Checklist') bindCk();
+}
+
+function bindCk(){
+  const box = [...view.querySelectorAll('input[type=checkbox]')];
+  const salvo = JSON.parse(localStorage.getItem('ck-fase2') || '[]');
+  const upd = ()=>{
+    const n = box.filter(b=>b.checked).length;
+    view.querySelector('#ckbar').style.width = (n/box.length*100)+'%';
+    view.querySelector('#ckt').textContent = `${n} de ${box.length} concluídos`;
+    localStorage.setItem('ck-fase2', JSON.stringify(box.map(b=>b.checked)));
+  };
+  box.forEach((b,i)=>{ b.checked = !!salvo[i]; b.onchange = upd; });
+  upd();
+}
+mermaid.initialize({startOnLoad:false, theme:'neutral'});
+</script>
+</body>
+</html>

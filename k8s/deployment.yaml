@@ -72,3 +72,4 @@ spec:
       resource:
         name: cpu
         target: { type: Utilization, averageUtilization: 70 }
+"*.sh text eol=lf" | Out-File -Encoding ascii .gitattributes -Append
