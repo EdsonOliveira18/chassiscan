@@ -1,0 +1,5 @@
+﻿# Vulnerabilidades aceitas com justificativa - Fase 2
+# Formato: CVE-ID  (revisar a cada sprint)
+
+# Exemplo: CVE do sistema base sem fix disponivel upstream
+# CVE-2023-45853

@@ -1,0 +1,174 @@
+name: CD - Deploy Contínuo
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  packages: write
+  security-events: write
+
+concurrency:
+  group: cd-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
+
+jobs:
+  # ---------- Estágio 1: Qualidade ----------
+  quality:
+    name: Qualidade (lint + testes)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+
+      - name: Instalar dependências
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt ruff pytest pytest-cov
+
+      - name: Lint
+        run: ruff check .
+
+      - name: Testes + cobertura
+        run: pytest --cov=app --cov-report=xml --cov-fail-under=70
+
+      - name: Publicar relatório de cobertura
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml
+          if-no-files-found: ignore
+
+  # ---------- Estágio 2: Build & Push ----------
+  build:
+    name: Build & Push (GHCR)
+    needs: quality
+    runs-on: ubuntu-latest
+    outputs:
+      digest: ${{ steps.push.outputs.digest }}
+      version: ${{ steps.meta.outputs.version }}
+      image_ref: ${{ env.IMAGE }}@${{ steps.push.outputs.digest }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=ref,event=tag
+            type=sha,prefix=sha-
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - id: push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          provenance: true
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ---------- Estágio 3: Segurança ----------
+  security:
+    name: Segurança (Trivy)
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Trivy - scan da imagem (SARIF)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ needs.build.outputs.image_ref }}
+          format: sarif
+          output: trivy.sarif
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "0"
+
+      - name: Enviar SARIF para Code Scanning
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy.sarif
+          category: trivy-image
+
+      - name: Trivy - gate (falha em CRITICAL)
+        uses: aquasecurity/trivy-action@master
+        with:
+          image-ref: ${{ needs.build.outputs.image_ref }}
+          format: table
+          severity: CRITICAL
+          ignore-unfixed: true
+          exit-code: "1"
+
+  # ---------- Estágio 4: Deploy Staging ----------
+  deploy-staging:
+    name: Deploy Staging
+    needs: [build, security]
+    runs-on: ubuntu-latest
+    environment:
+      name: staging
+      url: http://localhost:8000
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy staging
+        run: bash scripts/deploy.sh staging "${{ needs.build.outputs.version }}"
+
+      - name: Smoke tests
+        run: bash scripts/smoke_test.sh http://localhost:8000
+
+      - name: Rollback automático (staging)
+        if: failure()
+        run: bash scripts/rollback.sh staging
+
+  # ---------- Estágio 5: Deploy Produção ----------
+  deploy-prod:
+    name: Deploy Produção
+    needs: [build, deploy-staging]
+    runs-on: ubuntu-latest
+    environment:
+      name: production        # exige aprovação manual (Required reviewers)
+      url: http://localhost:8000
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy produção
+        run: bash scripts/deploy.sh production "${{ needs.build.outputs.version }}"
+
+      - name: Smoke tests
+        id: smoke
+        run: bash scripts/smoke_test.sh http://localhost:8000
+
+      - name: Rollback automático
+        if: failure()
+        run: bash scripts/rollback.sh production
+
+      - name: Resumo do deploy
+        if: always()
+        run: |
+          echo "### Deploy produção" >> $GITHUB_STEP_SUMMARY
+          echo "- Versão: ${{ needs.build.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Digest: ${{ needs.build.outputs.digest }}" >> $GITHUB_STEP_SUMMARY
+          echo "- Status: ${{ job.status }}" >> $GITHUB_STEP_SUMMARY
