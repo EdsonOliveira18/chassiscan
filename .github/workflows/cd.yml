@@ -20,6 +20,7 @@ env:
 jobs:
   # ---------- Estágio 1: Qualidade ----------
   quality:
+    name: Qualidade (lint + testes)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -50,6 +51,7 @@ jobs:
 
   # ---------- Estágio 2: Build & Push ----------
   build:
+    name: Build & Push (GHCR)
     needs: quality
     runs-on: ubuntu-latest
     outputs:
@@ -89,13 +91,14 @@ jobs:
 
   # ---------- Estágio 3: Segurança ----------
   security:
+    name: Segurança (Trivy)
     needs: build
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
       - name: Trivy - scan da imagem (SARIF)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@master
         with:
           image-ref: ${{ needs.build.outputs.image_ref }}
           format: sarif
@@ -111,7 +114,7 @@ jobs:
           category: trivy-image
 
       - name: Trivy - gate (falha em CRITICAL)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@master
         with:
           image-ref: ${{ needs.build.outputs.image_ref }}
           format: table
@@ -121,6 +124,7 @@ jobs:
 
   # ---------- Estágio 4: Deploy Staging ----------
   deploy-staging:
+    name: Deploy Staging
     needs: [build, security]
     runs-on: ubuntu-latest
     environment:
@@ -141,6 +145,7 @@ jobs:
 
   # ---------- Estágio 5: Deploy Produção ----------
   deploy-prod:
+    name: Deploy Produção
     needs: [build, deploy-staging]
     runs-on: ubuntu-latest
     environment:
